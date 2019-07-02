@@ -8,13 +8,14 @@ import argparse
 import re
 
 parser = argparse.ArgumentParser()
-parser.add_argument('file')
-parser.add_argument('output')
+parser.add_argument('-input','--input',dest='input')
+parser.add_argument('-file','--template',dest='file')
+parser.add_argument('-output','--output',dest='output')
 args = parser.parse_args()
 with open(args.file) as file:
         datastore = json.load(file)
 
-image_file='/home/simran/Text-Detect/images/0001.jpg'
+image_file=args.input
 image  = Image.open(image_file)
 
 client = vision.ImageAnnotatorClient()
@@ -159,7 +160,7 @@ def find_data_right(res,x,vertice):
 def find_data_down(res,x,y):
   text=""
   for i in range(0,len(res)):
-    if ((res[i][1] in range(y,int(y+0.15*y)))and (res[i][0] in range(int(x-0.10*x),int(x+0.10*x)))):
+    if ((res[i][1] in range(y,int(y+0.25*y)))and (res[i][0] in range(int(x-0.10*x),int(x+0.10*x)))):
       text+=res[i][4]
   return(text)
 
@@ -178,8 +179,8 @@ if __name__== "__main__":
   bound=get_document_bounds(response,FeatureType.BLOCK)
   draw_boxes(image,bounds)
   draw_blocks(image,bound)
-  # x,y=check_loc("From ")
-  # find_data_down(block,x,y)
+  # x,y=check_loc("Product Description ")
+  # print("product description",find_data_down(block,x,y))
 
   right=datastore["right"]
   down=datastore["down"]
@@ -188,9 +189,12 @@ if __name__== "__main__":
   for key,values in right.items():
     x,y=check_loc(key)
     data_raw=find_data_right(res,x,y)
-    data=re.search(values,data_raw)
-    print(key,data.group(),"\n")
-    output[key]=data.group()
+    if(values==""):
+      data=data_raw
+    else:
+      data=re.search(values,data_raw).group()
+    print(key,data,"\n")
+    output[key]=data
     
       
 
