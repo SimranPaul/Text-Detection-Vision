@@ -1,15 +1,26 @@
 {
-    "Due Date ": "January 31, 2016",
-    "Total Due ": "93.50",
     "Invoice Date ": "January 25, 2016",
-    "From ": "From:\nDEMO - Sliced Invoices\nSuite 5A-1204\n123 Somewhere Street\nYour City AZ 12345\ndmin@slicedinvoices.com\n",
-    "Tax ": "8.50",
-    "To ": "To:\nTest Business\n123 Somewhere St\nMelbourne, VIC 3000\ntest@test.com\n",
-    "Rate Price ": "85.00",
     "Adjust ": "0.00",
-    "Invoice Number ": "INV-3337",
+    "To ": "To:\nTest Business\n123 Somewhere St\nMelbourne, VIC 3000\ntest@test.com\n",
     "Sub Total ": "85.00",
+    "From ": "From:\nDEMO - Sliced Invoices\nSuite 5A-1204\n123 Somewhere Street\nYour City AZ 12345\nadmin@slicedinvoices.com\n",
+    "Service ": "Service\nWeb Design\nThis is a sample description...\n",
+    "Invoice Number ": "INV-3337",
     "Total ": "93.50",
-    "Order Number ": "12345",
-    "Service ": "Service\nWeb Design\nThis is a sample description...\n"
+    "Tax ": "8.50",
+    "Total Due ": "93.50",
+    "Rate Price ": "85.00"
+}
+{
+    "Invoice Date ": "January 25, 2016",
+    "Adjust ": "0.00",
+    "To ": "To:\nTest Business\n123 Somewhere St\nMelbourne, VIC 3000\ntest@test.com\nTo:\nTest Business\n123 Somewhere St\nMelbourne, VIC 3000\ntest@test.com\n",
+    "Sub Total ": "85.00",
+    "From ": "From:\nDEMO - Sliced Invoices\nSuite 5A-1204\n123 Somewhere Street\nYour City AZ 12345\nadmin@slicedinvoices.com\nFrom:\nDEMO - Sliced Invoices\nSuite 5A-1204\n123 Somewhere Street\nYour City AZ 12345\nadmin@slicedinvoices.com\n",
+    "Service ": "Service\nService\nWeb Design\nThis is a sample description...\nWeb Design\nThis is a sample description...\n",
+    "Invoice Number ": "INV-3337",
+    "Total ": "9393",
+    "Tax ": "88.",
+    "Total Due ": "9393",
+    "Rate Price ": "85.00"
 }

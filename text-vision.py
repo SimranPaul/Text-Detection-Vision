@@ -6,24 +6,10 @@ from enum import Enum
 import json
 import argparse
 import re
+from pdf2image import convert_from_path
+import glob
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-input','--input',dest='input')
-parser.add_argument('-file','--template',dest='file')
-parser.add_argument('-output','--output',dest='output')
-args = parser.parse_args()
-with open(args.file) as file:
-        datastore = json.load(file)
 
-image_file=args.input
-image  = Image.open(image_file)
-
-client = vision.ImageAnnotatorClient()
-with io.open(image_file,'rb') as image_file1:
-        content = image_file1.read()
-content_image = types.Image(content=content)
-response = client.document_text_detection(image=content_image)
-document = response.full_text_annotation
 i=0
 j=0
 res=[]
@@ -36,7 +22,25 @@ class FeatureType(Enum):
     WORD = 4
     SYMBOL = 5
 
+#Gives bounding vertices of required type- block,paragraph,word,symbol
+def get_document_bounds(response, feature):
+    bounds=[]
+    for i,page in enumerate(document.pages):
+        for block in page.blocks:
+            if feature==FeatureType.BLOCK:
+                bounds.append(block.bounding_box)
+            for paragraph in block.paragraphs:
+                if feature==FeatureType.PARA:
+                    bounds.append(paragraph.bounding_box)
+                for word in paragraph.words:
+                    for symbol in word.symbols:
+                        if (feature == FeatureType.SYMBOL):
+                            bounds.append(symbol.bounding_box)
+                    if (feature == FeatureType.WORD):
+                        bounds.append(word.bounding_box)
+    return bounds
 
+#Vertices of each word is recorded.
 def draw_boxes(image, bounds):
     #orig=image.copy()
     global i
@@ -47,9 +51,11 @@ def draw_boxes(image, bounds):
         endY=bound.vertices[2].y
         res.append((startX,startY,endX,endY,text_within(document,startX,startY,endX,endY)))
         i+=1
+    #Sorting result top to bottom, left to right
     res.sort(key = lambda x: (x[1],x[0]))
     return(res)
 
+#Vertices of each block is recorded 
 def draw_blocks(image,bounds):
   global j
   for bound in bounds:
@@ -62,9 +68,7 @@ def draw_blocks(image,bounds):
   block.sort(key = lambda x: (x[1],x[0]))
   return(block)
 
-
-
-
+#Finding Text within set bounding box
 def text_within(document,x1,y1,x2,y2): 
   text=""
 
@@ -89,29 +93,13 @@ def text_within(document,x1,y1,x2,y2):
                 text+='\n'
     return text
 
-def get_document_bounds(response, feature):
-    bounds=[]
-    for i,page in enumerate(document.pages):
-        for block in page.blocks:
-            if feature==FeatureType.BLOCK:
-                bounds.append(block.bounding_box)
-            for paragraph in block.paragraphs:
-                if feature==FeatureType.PARA:
-                    bounds.append(paragraph.bounding_box)
-                for word in paragraph.words:
-                    for symbol in word.symbols:
-                        if (feature == FeatureType.SYMBOL):
-                            bounds.append(symbol.bounding_box)
-                    if (feature == FeatureType.WORD):
-                        bounds.append(word.bounding_box)
-    return bounds
-
 def assemble_word(word):
     assembled_word=""
     for symbol in word.symbols:
         assembled_word+=symbol.text
     return assembled_word
 
+#Finding location of each label in the document
 def find_word_location(document,word_to_find):
     loc=[]
     for page in document.pages:
@@ -123,6 +111,7 @@ def find_word_location(document,word_to_find):
                         loc.append(word.bounding_box)
     return loc
 
+#Comparing double-worded label locations 
 def check_loc(keys):
     loc=[]
     label=[]
@@ -149,18 +138,18 @@ def check_loc(keys):
             if (loc[0][i].vertices[0].y==loc[1][j].vertices[0].y):
               return (loc[1][j].vertices[0].x,loc[1][j].vertices[0].y)
 
-
-def find_data_right(res,x,vertice):
+#Finding data having approx same y values - using adjustment factor
+def find_data_right(res,x,vertice,y_adjust=0.01):
   text=""
   for i in range(0,len(res)):
-    if (res[i][1]==vertice or res[i][1] in range(int(vertice-0.01*vertice),int(vertice+0.01*vertice))):
+    if (res[i][1]==vertice or res[i][1] in range(int(vertice-y_adjust*vertice),int(vertice+y_adjust*vertice))):
       text+=res[i][4]
   return(text)
 
-def find_data_down(res,x,y):
+def find_data_down(res,x,y,x_adjust=0.10,y_adjust=0.25):
   text=""
   for i in range(0,len(res)):
-    if ((res[i][1] in range(y,int(y+0.25*y)))and (res[i][0] in range(int(x-0.10*x),int(x+0.10*x)))):
+    if ((res[i][1] in range(y,int(y+y_adjust*y)))and (res[i][0] in range(int(x-x_adjust*x),int(x+x_adjust*x)))):
       text+=res[i][4]
   return(text)
 
@@ -173,41 +162,100 @@ def find_data_down(res,x,y):
 
 if __name__== "__main__":
 
+  #Argument Parsing
+  parser = argparse.ArgumentParser()
+  parser.add_argument('-input','--input',dest='input')
+  parser.add_argument('-file','--template',dest='file')
+  parser.add_argument('-output','--output',dest='output')
+  parser.add_argument('-x','--x_adjust',dest='x_adjust',default=0.10)
+  parser.add_argument('-y','--y_adjust',dest='y_adjust',default=0.01)
 
+  args = parser.parse_args()
+  error_log=open("errorlog.txt","w+")
+#Loading template into a dictionary 
+  with open(args.file) as file:
+        datastore = json.load(file)
 
-  bounds = get_document_bounds(response,FeatureType.WORD)
-  bound=get_document_bounds(response,FeatureType.BLOCK)
-  draw_boxes(image,bounds)
-  draw_blocks(image,bound)
-  # x,y=check_loc("Product Description ")
-  # print("product description",find_data_down(block,x,y))
+  f=0
+  pdffiles = []
+  for file in glob.glob(args.input+"/*.pdf"):
+    pdffiles.append(file)
+    print(pdffiles[f])
+    pages = convert_from_path((pdffiles[f]), 500)
+    f+=1
+    for page in pages:
+      page.save('eg.jpg','JPEG')
+      image_file='eg.jpg'
+      image  = Image.open(image_file)
 
-  right=datastore["right"]
-  down=datastore["down"]
-  
+      client = vision.ImageAnnotatorClient()
+      with io.open(image_file,'rb') as image_file1:
+              content = image_file1.read()
+      content_image = types.Image(content=content)
+      response = client.document_text_detection(image=content_image)
+      #storing the response obtained into document
+      document = response.full_text_annotation
 
-  for key,values in right.items():
-    x,y=check_loc(key)
-    data_raw=find_data_right(res,x,y)
-    if(values==""):
-      data=data_raw
-    else:
-      data=re.search(values,data_raw).group()
-    print(key,data,"\n")
-    output[key]=data
-    
+      
+      bounds = get_document_bounds(response,FeatureType.WORD)#Word list
+      bound=get_document_bounds(response,FeatureType.BLOCK)#Blocks list
+      draw_boxes(image,bounds)
+      draw_blocks(image,bound)
+      # x,y=check_loc("Product Description ")
+      # print("product description",find_data_down(block,x,y))
+
+      right=datastore["right"]
+      down=datastore["down"]
+      
       
 
-    
-  for key,values in down.items():
-    x,y=check_loc(key)
-    data_raw=find_data_down(block,x,y)
-    if (values ==""):
-       data=data_raw
-    else:
-      data=re.search(values,data_raw).group()
-    print(key,data)
-    output[key]=data
+      #Searching for data to the right of label
+      for key,values in right.items():
+        if(check_loc(key)==None):
+         #Error log- key not found
+         error_log.write((key+" not found in"+pdffiles[f-1]))
+         continue
+        x,y=check_loc(key)
+        data_raw=find_data_right(res,x,y,args.y_adjust)
+        if(data_raw==None):
+          #Write error message into log- data not found
+          error_log.write(("Data corresponding to"+key+" not found in"+pdffiles[f-1]))
+          continue
+        if(values==""):
+          data=data_raw
+        else:
+          if(re.search(values,data_raw)==None): 
+            #If data of correct format isn't found - data not found error message 
+            error_log.write(("Data corresponding to"+key+" does not match given format in"+pdffiles[f-1]))
+            continue
+          else:
+            data= re.search(values,data_raw).group()
+        print(key,data,"\n")
+        output[key]=data
+        
+          
 
-  with open(args.output,'a') as file:
-        json.dump(output,file)
+      #Searching for values below the table
+      for key,values in down.items():
+        if(check_loc(key)==None):
+          error_log.write((key+" not found in"+pdffiles[f-1]))
+          continue
+        x,y=check_loc(key)
+        data_raw=find_data_down(block,x,y)
+        if(data_raw==None):
+          #Write error message into log- data not found
+          error_log.write(("Data corresponding to"+key+" not found in"+pdffiles[f-1]))
+          continue
+        if (values ==""):
+          data=data_raw
+        else:
+          if(re.search(values,data_raw)==None):
+            error_log.write(("Data corresponding to"+key+" does not match given format in"+pdffiles[f-1]))
+            continue
+          else:
+            data= re.search(values,data_raw).group()
+        print(key,data)
+        output[key]=data
+      #Appending json block into output.json
+    with open(args.output,'a') as file:
+      json.dump(output,file)
