@@ -8,6 +8,7 @@ import argparse
 import re
 from pdf2image import convert_from_path
 import glob
+import time
 
 
 i=0
@@ -139,7 +140,7 @@ def check_loc(keys):
               return (loc[1][j].vertices[0].x,loc[1][j].vertices[0].y)
 
 #Finding data having approx same y values - using adjustment factor
-def find_data_right(res,x,vertice,y_adjust=0.01):
+def find_data_right(res,x,vertice,y_adjust=0.02):
   text=""
   for i in range(0,len(res)):
     if (res[i][1]==vertice or res[i][1] in range(int(vertice-y_adjust*vertice),int(vertice+y_adjust*vertice))):
@@ -183,79 +184,89 @@ if __name__== "__main__":
     print(pdffiles[f])
     pages = convert_from_path((pdffiles[f]), 500)
     f+=1
+    pno=-1
+    output[pdffiles[f-1]]={}
     for page in pages:
       page.save('eg.jpg','JPEG')
       image_file='eg.jpg'
+      pno+=1
       image  = Image.open(image_file)
-
+      output[pdffiles[f-1]][pno]={}
       client = vision.ImageAnnotatorClient()
+      t1=time.time()
       with io.open(image_file,'rb') as image_file1:
               content = image_file1.read()
       content_image = types.Image(content=content)
       response = client.document_text_detection(image=content_image)
       #storing the response obtained into document
       document = response.full_text_annotation
-
+      t2=time.time()
+      print("Response from Google: ",t2-t1)
       
       bounds = get_document_bounds(response,FeatureType.WORD)#Word list
       bound=get_document_bounds(response,FeatureType.BLOCK)#Blocks list
       draw_boxes(image,bounds)
       draw_blocks(image,bound)
-      # x,y=check_loc("Product Description ")
-      # print("product description",find_data_down(block,x,y))
+      # x,y=check_loc("Due Date ")
+      # val="(Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\\s+\\d{1,2},\\s+\\d{4}"
+      # print("D: ",re.search(val,find_data_right(res,x,y)))
 
-      right=datastore["right"]
+      right=datastore["right"]      
       down=datastore["down"]
       
       
-
+      t1=time.time()
       #Searching for data to the right of label
       for key,values in right.items():
         if(check_loc(key)==None):
          #Error log- key not found
-         error_log.write((key+" not found in"+pdffiles[f-1]))
+         error_log.write((key+" not found in "+pdffiles[f-1]))
          continue
         x,y=check_loc(key)
         data_raw=find_data_right(res,x,y,args.y_adjust)
         if(data_raw==None):
           #Write error message into log- data not found
-          error_log.write(("Data corresponding to"+key+" not found in"+pdffiles[f-1]))
+          error_log.write(("Data corresponding to "+key+" not found in "+pdffiles[f-1]))
           continue
         if(values==""):
           data=data_raw
         else:
           if(re.search(values,data_raw)==None): 
             #If data of correct format isn't found - data not found error message 
-            error_log.write(("Data corresponding to"+key+" does not match given format in"+pdffiles[f-1]))
+            error_log.write(("Data corresponding to "+key+" does not match given format in "+pdffiles[f-1]))
             continue
           else:
             data= re.search(values,data_raw).group()
         print(key,data,"\n")
-        output[key]=data
+        output[pdffiles[f-1]][pno][key]=data
         
           
 
       #Searching for values below the table
       for key,values in down.items():
         if(check_loc(key)==None):
-          error_log.write((key+" not found in"+pdffiles[f-1]))
+          error_log.write((key+" not found in "+pdffiles[f-1]))
           continue
         x,y=check_loc(key)
         data_raw=find_data_down(block,x,y)
         if(data_raw==None):
           #Write error message into log- data not found
-          error_log.write(("Data corresponding to"+key+" not found in"+pdffiles[f-1]))
+          error_log.write(("Data corresponding to "+key+" not found in "+pdffiles[f-1]))
           continue
         if (values ==""):
           data=data_raw
         else:
           if(re.search(values,data_raw)==None):
-            error_log.write(("Data corresponding to"+key+" does not match given format in"+pdffiles[f-1]))
+            error_log.write(("Data corresponding to "+key+" does not match given format in "+pdffiles[f-1]))
             continue
           else:
             data= re.search(values,data_raw).group()
         print(key,data)
-        output[key]=data
+        output[pdffiles[f-1]][pno][key]=data
+
+      t2=time.time()
+      print("My code: ",t2-t1,'\n')
+    
       #Appending json block into output.json
-    with open(args.output,'a') as file:
+  with open(args.output,'a') as file:
       json.dump(output,file)
